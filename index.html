@@ -1,0 +1,422 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, FileSpreadsheet, Download, RefreshCw, AlertCircle, CheckCircle, Trash2, FileText, ArrowRight, Table as TableIcon, Loader2 } from 'lucide-react';
+
+// URL para a biblioteca SheetJS (XLSX) - Usada para LER (excelente compatibilidade)
+const XLSX_CDN = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
+
+// URL para a biblioteca ExcelJS - Usada para ESCREVER (suporte a Tabelas e Estilos)
+const EXCELJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+
+export default function App() {
+  const [isLibLoaded, setIsLibLoaded] = useState(false);
+  const [file, setFile] = useState(null);
+  const [processedData, setProcessedData] = useState(null);
+  const [headers, setHeaders] = useState([]); // Armazenar cabeçalhos separadamente para o ExcelJS
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // Novo estado para o botão de download
+  const [error, setError] = useState("");
+  const [stats, setStats] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Carregar as bibliotecas dinamicamente
+  useEffect(() => {
+    const loadLibraries = async () => {
+      // Função helper para carregar script
+      const loadScript = (src, checkGlobal) => {
+        return new Promise((resolve) => {
+          if (window[checkGlobal]) {
+            resolve();
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = src;
+          script.onload = () => resolve();
+          document.body.appendChild(script);
+        });
+      };
+
+      await Promise.all([
+        loadScript(XLSX_CDN, 'XLSX'),
+        loadScript(EXCELJS_CDN, 'ExcelJS')
+      ]);
+      
+      setIsLibLoaded(true);
+    };
+
+    loadLibraries();
+  }, []);
+
+  // Função auxiliar para decodificar HTML Entities
+  const decodeHTMLEntities = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<!doctype html><body>${text}`, 'text/html');
+    return doc.body.textContent;
+  };
+
+  // Função auxiliar para converter string de data PT-BR
+  const parseBrazilianDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return dateStr;
+    try {
+      const [datePart, timePart] = dateStr.split(' ');
+      if (!datePart) return dateStr;
+
+      const [day, month, year] = datePart.split('/').map(Number);
+      
+      let hours = 0, minutes = 0, seconds = 0;
+      if (timePart) {
+        [hours, minutes, seconds] = timePart.split(':').map(Number);
+      }
+
+      if (!day || !month || !year) return dateStr;
+      return new Date(year, month - 1, day, hours, minutes, seconds || 0);
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  const handleFileSelection = (selectedFile) => {
+    if (selectedFile) {
+      const validTypes = ['.xlsx', '.xls', '.csv'];
+      const isExtensionValid = validTypes.some(ext => selectedFile.name.toLowerCase().endsWith(ext));
+      
+      if (!isExtensionValid) {
+          setError("Por favor, envie apenas arquivos Excel (.xlsx, .xls) ou CSV.");
+          return;
+      }
+
+      setFile(selectedFile);
+      setError("");
+      setProcessedData(null);
+      setHeaders([]);
+      setStats(null);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    handleFileSelection(e.target.files[0]);
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelection(e.dataTransfer.files[0]);
+      const fileInput = document.getElementById('fileInput');
+      if (fileInput) fileInput.value = ''; 
+    }
+  };
+
+  const processFile = async () => {
+    if (!file || !window.XLSX) return;
+    setIsLoading(true);
+    setError("");
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target.result;
+        const workbook = window.XLSX.read(data, { type: 'binary' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (jsonData.length < 2) throw new Error("Arquivo vazio ou sem linhas suficientes.");
+
+        // 1. Excluir a primeira linha
+        const cleanData = jsonData.slice(1);
+        if (cleanData.length === 0) throw new Error("Não há dados após remover cabeçalho.");
+
+        const currentHeaders = cleanData[0];
+        const rows = cleanData.slice(1);
+
+        const colMap = {
+          processo: currentHeaders.findIndex(h => h && h.toString().toLowerCase().includes("número processo")),
+          localizadores: currentHeaders.findIndex(h => h && h.toString().toLowerCase().includes("localizadores")),
+          inclusao: currentHeaders.findIndex(h => h && h.toString().toLowerCase().includes("inclusão no localizador")),
+          ultimoEvento: currentHeaders.findIndex(h => h && h.toString().toLowerCase().includes("último evento")),
+        };
+
+        if (colMap.localizadores === -1) setError("Aviso: Coluna 'Localizadores' não encontrada.");
+
+        // Adicionar novo cabeçalho
+        currentHeaders.push("Localizadores do Gabinete");
+
+        let gabCountTotal = 0;
+
+        const processedRows = rows.map(row => {
+          while (row.length < currentHeaders.length - 1) row.push("");
+
+          // Limpar Processo
+          if (colMap.processo !== -1 && row[colMap.processo]) {
+             row[colMap.processo] = String(row[colMap.processo]).trim();
+          }
+
+          // Processar Localizadores
+          let gCount = 0;
+          if (colMap.localizadores !== -1 && row[colMap.localizadores]) {
+            let locText = String(row[colMap.localizadores]);
+            locText = decodeHTMLEntities(locText);
+            
+            const matches = locText.match(/\(G\)/g);
+            gCount = matches ? matches.length : 0;
+            gabCountTotal += gCount;
+
+            locText = locText.replace(/\(Principal\)/gi, '').trim();
+            
+            // CORREÇÃO: Substituir " - " por quebra de linha SOMENTE se a próxima palavra for maiúscula ou emoji
+            locText = locText.replace(/\s+-\s+([^\s]+)/g, (match, nextWord) => {
+              const isAllUpperCaseOrSymbol = nextWord === nextWord.toUpperCase();
+              
+              if (isAllUpperCaseOrSymbol) {
+                return '\n' + nextWord;
+              } else {
+                return ' - ' + nextWord;
+              }
+            });
+
+            row[colMap.localizadores] = locText;
+          }
+
+          // Converter Data Inclusão
+          if (colMap.inclusao !== -1 && row[colMap.inclusao]) {
+            row[colMap.inclusao] = parseBrazilianDate(row[colMap.inclusao]);
+          }
+
+          // Converter Data Último Evento
+          if (colMap.ultimoEvento !== -1 && row[colMap.ultimoEvento]) {
+            row[colMap.ultimoEvento] = parseBrazilianDate(row[colMap.ultimoEvento]);
+          }
+
+          row.push(gCount);
+          return row;
+        });
+
+        setHeaders(currentHeaders);
+        setProcessedData(processedRows);
+        setStats({
+          totalRows: processedRows.length,
+          totalG: gabCountTotal
+        });
+
+      } catch (err) {
+        console.error(err);
+        setError("Erro ao processar: " + err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
+  const downloadFile = async () => {
+    if (!processedData || !window.ExcelJS) return;
+    
+    setIsDownloading(true);
+
+    try {
+      // Simular um pequeno delay para que o usuário veja o estado de carregamento
+      // pois a geração pode ser instantânea em arquivos pequenos
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Criar Workbook ExcelJS
+      const workbook = new window.ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Dados Processados');
+
+      // Configurar colunas (definir largura e chaves)
+      const columnsConfig = headers.map(header => ({
+        name: header,
+        filterButton: true,
+      }));
+
+      // Adicionar Tabela do Excel (ListObject)
+      worksheet.addTable({
+        name: 'TabelaProcessos',
+        ref: 'A1',
+        headerRow: true,
+        totalsRow: false,
+        style: {
+          theme: 'TableStyleMedium2', // Estilo azul padrão do Excel (Listrado)
+          showRowStripes: true,
+        },
+        columns: columnsConfig,
+        rows: processedData, // Dados vão direto na tabela
+      });
+
+      // AJUSTES DE ESTILO APÓS CRIAR A TABELA
+      
+      // Encontrar índices das colunas importantes
+      const locIndex = headers.findIndex(h => h.toString().toLowerCase().includes("localizadores"));
+      const ultimoEventoIndex = headers.findIndex(h => h.toString().toLowerCase().includes("último evento"));
+      
+      // Ajustar larguras e alinhamentos
+      worksheet.columns.forEach((col, index) => {
+        // Largura padrão
+        col.width = 20;
+
+        // Se for Localizadores, deixa mais largo e ativa quebra de linha
+        if (index === locIndex) {
+          col.width = 60;
+          col.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
+        } 
+        // Se for Último Evento, formata como data curta
+        else if (index === ultimoEventoIndex) {
+          col.width = 18;
+          col.numFmt = 'dd/mm/yyyy'; // Formato de data curta (pt-BR)
+          col.alignment = { vertical: 'top', horizontal: 'center' };
+        }
+        else {
+            // Alinhamento padrão para outras colunas
+            col.alignment = { vertical: 'top', horizontal: 'left' };
+        }
+      });
+
+      // Gerar Buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      // Download Blob
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Planilha_Judicial_Formatada_${new Date().toISOString().slice(0,10)}.xlsx`;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao gerar o arquivo Excel: " + err.message);
+    } finally {
+        setIsDownloading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <header className="text-center space-y-2 mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 flex items-center justify-center gap-3">
+            <FileSpreadsheet className="w-10 h-10 text-blue-600" />
+            Processador de Planilhas Judiciais
+          </h1>
+          <p className="text-slate-500 max-w-lg mx-auto">
+            Ferramenta automatizada para limpeza, formatação e extração de dados de localizadores (Gabinete).
+          </p>
+        </header>
+
+        {/* Main Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          
+          {/* Upload Section com Drag & Drop */}
+          <div className="p-8 border-b border-slate-100">
+            <div 
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-10 transition-all group duration-200 
+                ${isDragging 
+                  ? 'border-blue-500 bg-blue-50 scale-[1.02]' 
+                  : 'border-slate-300 bg-slate-50/50 hover:bg-blue-50/50 hover:border-blue-400'
+                }`}
+            >
+              <input 
+                type="file" 
+                accept=".xlsx, .xls, .csv" 
+                onChange={handleFileUpload} 
+                className="hidden" 
+                id="fileInput"
+              />
+              <label htmlFor="fileInput" className="cursor-pointer flex flex-col items-center w-full h-full">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-transform ${isDragging ? 'bg-blue-200 text-blue-700 scale-110' : 'bg-blue-100 text-blue-600 group-hover:scale-110'}`}>
+                  <Upload className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700 text-center">
+                  {file ? file.name : (isDragging ? "Solte o arquivo aqui!" : "Clique ou arraste sua planilha aqui")}
+                </h3>
+                <p className="text-sm text-slate-400 mt-2 text-center">
+                  Suporta .XLSX, .XLS e .CSV
+                </p>
+              </label>
+            </div>
+
+            {/* Actions */}
+            {file && !processedData && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={processFile}
+                  disabled={isLoading || !isLibLoaded}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-5 h-5" />
+                      Iniciar Processamento
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-4 bg-red-50 text-red-700 flex items-center gap-3 border-l-4 border-red-500">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {/* Results Section Simplificada */}
+          {processedData && (
+            <div className="p-8 bg-green-50/30">
+              <div className="flex flex-col items-center justify-center gap-6 text-center">
+                <div className="p-4 bg-green-100 text-green-700 rounded-full">
+                  <CheckCircle className="w-10 h-10" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">Processamento Concluído!</h3>
+                  <div className="text-slate-600 mt-2 text-sm">
+                    <p>{stats?.totalRows} linhas processadas e {stats?.totalG} localizadores (G) identificados.</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={downloadFile}
+                  disabled={isDownloading}
+                  className={`flex items-center gap-2 px-8 py-4 rounded-lg font-bold shadow-xl transition-all w-full md:w-auto justify-center min-w-[250px]
+                    ${isDownloading 
+                        ? 'bg-blue-600 text-white cursor-wait scale-95 shadow-blue-600/20' 
+                        : 'bg-green-600 hover:bg-green-700 text-white hover:-translate-y-1 shadow-green-600/20'
+                    }`}
+                >
+                  {isDownloading ? (
+                    <>
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                        Gerando Arquivo...
+                    </>
+                  ) : (
+                    <>
+                        <Download className="w-6 h-6" />
+                        Baixar Nova Planilha
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
