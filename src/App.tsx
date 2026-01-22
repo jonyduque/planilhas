@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileSpreadsheet, Download, RefreshCw, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import './App.css';
 
 // Declaração de tipos globais para as bibliotecas carregadas via CDN
 declare global {
@@ -332,34 +333,30 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="app-container">
+      <div className="main-card-wrapper">
 
         {/* Header */}
-        <header className="text-center space-y-2 mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 flex items-center justify-center gap-3">
-            <FileSpreadsheet className="w-10 h-10 text-blue-600" />
+        <header className="header">
+          <h1 className="header-title">
+            <FileSpreadsheet className="header-icon" />
             Processador de Planilhas Judiciais
           </h1>
-          <p className="text-slate-500 max-w-lg mx-auto">
+          <p className="header-subtitle">
             Ferramenta automatizada para limpeza, formatação e extração de dados de localizadores (Gabinete).
           </p>
         </header>
 
         {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="card">
 
           {/* Upload Section com Drag & Drop */}
-          <div className="p-8 border-b border-slate-100">
+          <div className="upload-section">
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-10 transition-all group duration-200
-                ${isDragging
-                  ? 'border-blue-500 bg-blue-50 scale-[1.02]'
-                  : 'border-slate-300 bg-slate-50/50 hover:bg-blue-50/50 hover:border-blue-400'
-                }`}
+              className={`dropzone ${isDragging ? 'dragging' : ''}`}
             >
               <input
                 type="file"
@@ -369,13 +366,13 @@ export default function App() {
                 id="fileInput"
               />
               <label htmlFor="fileInput" className="cursor-pointer flex flex-col items-center w-full h-full">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-transform ${isDragging ? 'bg-blue-200 text-blue-700 scale-110' : 'bg-blue-100 text-blue-600 group-hover:scale-110'}`}>
-                  <Upload className="w-8 h-8" />
+                <div className={`icon-circle ${isDragging ? 'dragging' : 'default'}`}>
+                  <Upload className="icon-lg" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-700 text-center">
+                <h3 className="drop-title">
                   {file ? file.name : (isDragging ? "Solte o arquivo aqui!" : "Clique ou arraste sua planilha aqui")}
                 </h3>
-                <p className="text-sm text-slate-400 mt-2 text-center">
+                <p className="drop-subtitle">
                   Suporta .XLSX, .XLS e .CSV
                 </p>
               </label>
@@ -383,15 +380,15 @@ export default function App() {
 
             {/* Actions */}
             {file && !processedData && (
-              <div className="mt-6 flex justify-center">
+              <div className="actions-container">
                 <button
                   onClick={processFile}
                   disabled={isLoading || !isLibLoaded}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-5 h-5 spin" />
                       Processando...
                     </>
                   ) : (
@@ -407,22 +404,22 @@ export default function App() {
 
           {/* Error Message */}
           {error && (
-            <div className="p-4 bg-red-50 text-red-700 flex items-center gap-3 border-l-4 border-red-500">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <div className="error-box">
+              <AlertCircle className="error-icon" />
               <p>{error}</p>
             </div>
           )}
 
           {/* Results Section Simplificada */}
           {processedData && (
-            <div className="p-8 bg-green-50/30">
-              <div className="flex flex-col items-center justify-center gap-6 text-center">
-                <div className="p-4 bg-green-100 text-green-700 rounded-full">
-                  <CheckCircle className="w-10 h-10" />
+            <div className="results-section">
+              <div className="results-content">
+                <div className="success-icon-bg">
+                  <CheckCircle className="icon-xl" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-800">Processamento Concluído!</h3>
-                  <div className="text-slate-600 mt-2 text-sm">
+                  <h3 className="results-title">Processamento Concluído!</h3>
+                  <div className="results-text">
                     <p>{stats?.totalRows} linhas processadas e {stats?.totalG} localizadores (G) identificados.</p>
                   </div>
                 </div>
@@ -430,15 +427,11 @@ export default function App() {
                 <button
                   onClick={downloadFile}
                   disabled={isDownloading}
-                  className={`flex items-center gap-2 px-8 py-4 rounded-lg font-bold shadow-xl transition-all w-full md:w-auto justify-center min-w-[250px]
-                    ${isDownloading
-                        ? 'bg-blue-600 text-white cursor-wait scale-95 shadow-blue-600/20'
-                        : 'bg-green-600 hover:bg-green-700 text-white hover:-translate-y-1 shadow-green-600/20'
-                    }`}
+                  className={`btn-download ${isDownloading ? 'loading' : 'success'}`}
                 >
                   {isDownloading ? (
                     <>
-                        <Loader2 className="w-6 h-6 animate-spin" />
+                        <Loader2 className="w-6 h-6 spin" />
                         Gerando Arquivo...
                     </>
                   ) : (
