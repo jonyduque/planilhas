@@ -16,11 +16,6 @@ const XLSX_CDN = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min
 // URL para a biblioteca ExcelJS - Usada para ESCREVER (suporte a Tabelas e Estilos)
 const EXCELJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
 
-interface Stats {
-  totalRows: number;
-  totalG: number;
-}
-
 interface ColMap {
   processo: number;
   localizadores: number;
@@ -36,7 +31,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [stats, setStats] = useState<Stats | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Carregar as bibliotecas dinamicamente
@@ -110,7 +104,6 @@ export default function App() {
       setError("");
       setProcessedData(null);
       setHeaders([]);
-      setStats(null);
     }
   };
 
@@ -127,6 +120,12 @@ export default function App() {
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+
+    // Evita que o estado de "dragging" seja removido ao passar por cima dos filhos (ícone, texto)
+    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+
     setIsDragging(false);
   };
 
@@ -235,10 +234,6 @@ export default function App() {
         // Converte currentHeaders para string[] explicitamente para o estado
         setHeaders(currentHeaders.map(String));
         setProcessedData(processedRows);
-        setStats({
-          totalRows: processedRows.length,
-          totalG: gabCountTotal
-        });
 
       } catch (err: any) {
         console.error(err);
@@ -340,11 +335,8 @@ export default function App() {
         <header className="header">
           <h1 className="header-title">
             <FileSpreadsheet className="header-icon" />
-            Processador de Planilhas Judiciais
+            Processador de Planilhas
           </h1>
-          <p className="header-subtitle">
-            Ferramenta automatizada para limpeza, formatação e extração de dados de localizadores (Gabinete).
-          </p>
         </header>
 
         {/* Main Card */}
@@ -365,7 +357,7 @@ export default function App() {
                 className="hidden"
                 id="fileInput"
               />
-              <label htmlFor="fileInput" className="cursor-pointer flex flex-col items-center w-full h-full">
+              <label htmlFor="fileInput">
                 <div className={`icon-circle ${isDragging ? 'dragging' : 'default'}`}>
                   <Upload className="icon-lg" />
                 </div>
@@ -388,12 +380,12 @@ export default function App() {
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-5 h-5 spin" />
+                      <Loader2 />
                       Processando...
                     </>
                   ) : (
                     <>
-                      <RefreshCw className="w-5 h-5" />
+                      <RefreshCw />
                       Iniciar Processamento
                     </>
                   )}
@@ -420,7 +412,6 @@ export default function App() {
                 <div>
                   <h3 className="results-title">Processamento Concluído!</h3>
                   <div className="results-text">
-                    <p>{stats?.totalRows} linhas processadas e {stats?.totalG} localizadores (G) identificados.</p>
                   </div>
                 </div>
 
