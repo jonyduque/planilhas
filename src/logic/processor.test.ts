@@ -15,17 +15,20 @@ describe('processRows', () => {
     const result = processRows(rawData);
 
     expect(result.error).toBeUndefined();
-    expect(result.headers).toContain("Dígito");
-    expect(result.headers).toContain("Feito");
-    expect(result.headers).toContain("Localizadores do Gabinete");
+
+    // Verify Column Order
+    const procIndex = result.headers.indexOf("Número Processo");
+    expect(procIndex).toBeGreaterThan(-1);
+    expect(result.headers[procIndex + 1]).toBe("Dígito");
+    expect(result.headers[procIndex + 2]).toBe("Feito");
+
+    const locIndexHeader = result.headers.indexOf("Localizadores");
+    expect(locIndexHeader).toBeGreaterThan(-1);
+    expect(result.headers[locIndexHeader + 1]).toBe("Localizadores do Gabinete");
 
     const processedRow = result.data[0];
 
     // Check Dígito (index 6 of "1234567890" is "7")
-    // Wait: charAt(6) is the 7th character.
-    // "1234567890"
-    //  0123456
-    // charAt(6) -> "7"
     const digitoIndex = result.headers.indexOf("Dígito");
     expect(processedRow[digitoIndex]).toBe("7");
 
@@ -37,10 +40,9 @@ describe('processRows', () => {
     const gCountIndex = result.headers.indexOf("Localizadores do Gabinete");
     expect(processedRow[gCountIndex]).toBe(1);
 
-    // Check Date parsing (checking if it returns a Date object)
-    // Inclusão index in raw headers is 3.
-    // In processed row, it's still index 3 because we replaced in place.
-    expect(processedRow[3]).toBeInstanceOf(Date);
+    // Check Date parsing
+    const inclusaoIndex = result.headers.indexOf("Inclusão no Localizador");
+    expect(processedRow[inclusaoIndex]).toBeInstanceOf(Date);
   });
 
   it('should handle short process numbers for Dígito', () => {

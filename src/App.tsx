@@ -146,6 +146,7 @@ export default function App() {
       // Encontrar índices das colunas importantes
       const locIndex = headers.findIndex(h => h.toString().toLowerCase().includes("localizadores"));
       const ultimoEventoIndex = headers.findIndex(h => h.toString().toLowerCase().includes("último evento"));
+      const feitoIndex = headers.findIndex(h => h.toString().toLowerCase() === "feito");
 
       // Ajustar larguras e alinhamentos
       worksheet.columns.forEach((col: any, index: number) => {
@@ -166,6 +167,16 @@ export default function App() {
           col.numFmt = 'dd/mm/yyyy'; // Formato de data curta (pt-BR)
           horizontalAlign = 'center';
         }
+        // Se for Feito, adiciona validação de dados
+        else if (index === feitoIndex) {
+          col.width = 15;
+          horizontalAlign = 'center';
+          col.dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            formulae: ['"Sim,Não"'] // Dropdown com opções
+          };
+        }
 
         col.alignment = {
           wrapText: true,
@@ -173,6 +184,46 @@ export default function App() {
           horizontal: horizontalAlign
         };
       });
+
+      // Aplica Formatação Condicional
+      // Se a coluna Feito existir
+      if (feitoIndex !== -1) {
+        // Obter a letra da coluna Feito (ExcelJS colunas são 1-based, mas index é 0-based)
+        // Uma forma segura de pegar a letra é usar worksheet.getColumn(feitoIndex + 1).letter
+        const feitoColLetter = worksheet.getColumn(feitoIndex + 1).letter;
+
+        // Intervalo da tabela (começa na linha 2, até o final)
+        // Podemos usar A2:Z<rowCount> (ajustando Z para ultima coluna)
+        const lastColLetter = worksheet.getColumn(headers.length).letter;
+        const totalRows = processedData.length + 1; // +1 do header
+
+        worksheet.addConditionalFormatting({
+          ref: `A2:${lastColLetter}${totalRows}`,
+          rules: [
+            {
+              type: 'expression',
+              priority: 1,
+              formulae: [`=$${feitoColLetter}2="Sim"`], // $Col2 fixa a coluna, 2 é relativo a linha inicial
+              style: {
+                fill: {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  bgColor: { argb: 'FFC6EFCE' } // Green background
+                },
+                font: {
+                  color: { argb: 'FF006100' } // Dark Green text
+                },
+                border: {
+                  top: { style: 'thin', color: { argb: 'FF006100' } },
+                  left: { style: 'thin', color: { argb: 'FF006100' } },
+                  bottom: { style: 'thin', color: { argb: 'FF006100' } },
+                  right: { style: 'thin', color: { argb: 'FF006100' } }
+                }
+              }
+            }
+          ]
+        });
+      }
 
       // Gerar Buffer
       const buffer = await workbook.xlsx.writeBuffer();

@@ -77,22 +77,64 @@ export const processRows = (rawData: any[][]): ProcessResult => {
       ultimoEvento: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("último evento")),
     };
 
-    // Nota: A lógica original apenas avisa, não retorna erro, mas define headers
-    const newHeaders = [...currentHeaders, "Localizadores do Gabinete", "Dígito", "Feito"].map(String);
+    // Definitions helper to manage column order
+    type HeaderDef =
+      | { type: 'existing'; index: number; name: string }
+      | { type: 'new'; key: 'gabinete' | 'digito' | 'feito'; name: string };
+
+    let headerDefs: HeaderDef[] = currentHeaders.map((h: any, i: number) => ({
+      type: 'existing',
+      index: i,
+      name: String(h)
+    }));
+
+
+
+    // Insert "Localizadores do Gabinete" after "Localizadores"
+
+    // "Localizadores" is unique enough? "Inclusão no Localizador" also has "Localizador".
+    // Using the same logic as colMap helps consistency.
+    const locIdxExact = headerDefs.findIndex(d => d.type === 'existing' && d.index === colMap.localizadores);
+
+    if (locIdxExact !== -1) {
+      headerDefs.splice(locIdxExact + 1, 0, { type: 'new', key: 'gabinete', name: "Localizadores do Gabinete" });
+    } else {
+      headerDefs.push({ type: 'new', key: 'gabinete', name: "Localizadores do Gabinete" });
+    }
+
+    // Insert "Dígito" and "Feito" after "Número Processo"
+    const procIdxExact = headerDefs.findIndex(d => d.type === 'existing' && d.index === colMap.processo);
+    if (procIdxExact !== -1) {
+      // Insert in reverse order to keep indices simple or just +1 and +2
+      headerDefs.splice(procIdxExact + 1, 0,
+        { type: 'new', key: 'digito', name: "Dígito" },
+        { type: 'new', key: 'feito', name: "Feito" }
+      );
+    } else {
+      headerDefs.push(
+        { type: 'new', key: 'digito', name: "Dígito" },
+        { type: 'new', key: 'feito', name: "Feito" }
+      );
+    }
+
+    const newHeaders = headerDefs.map(d => d.name);
 
     const processedRows = rows.map((row: any[]) => {
       // Garante que row é um array
       if (!Array.isArray(row)) return row;
 
-      // Preenche colunas vazias até o header original
-      while (row.length < currentHeaders.length) row.push("");
+      // ... (Existing processing logic for cleaning data stays same, but we need variables first) ...
+      // We will perform the existing cleaning BUT separate extraction from assignment to specific index
 
-      // Limpar Processo
+      // 1. Clean Existing Row Data (Mutable operations on 'row' clone if strictly needed,
+      // but here we just need to extract values for the new columns)
+
+      // Clean "Processo"
       if (colMap.processo !== -1 && row[colMap.processo]) {
-        row[colMap.processo] = String(row[colMap.processo]).trim();
+         row[colMap.processo] = String(row[colMap.processo]).trim();
       }
 
-      // Processar Localizadores
+      // Compute "Localizadores do Gabinete" (gCount) and Clean "Localizadores"
       let gCount = 0;
       if (colMap.localizadores !== -1 && row[colMap.localizadores]) {
         let locText = String(row[colMap.localizadores]);
@@ -102,45 +144,39 @@ export const processRows = (rawData: any[][]): ProcessResult => {
         gCount = matches ? matches.length : 0;
 
         locText = locText.replace(/\(Principal\)/gi, '').trim();
-
-        // Regex para quebra de linha
         locText = locText.replace(/\s+-\s+([^\s]+)/g, (_: string, nextWord: string) => {
           const isAllUpperCaseOrSymbol = nextWord === nextWord.toUpperCase();
-          if (isAllUpperCaseOrSymbol) {
-            return '\n' + nextWord;
-          } else {
-            return ' - ' + nextWord;
-          }
+          return isAllUpperCaseOrSymbol ? '\n' + nextWord : ' - ' + nextWord;
         });
 
         row[colMap.localizadores] = locText;
       }
 
-      // Converter Data Inclusão
-      if (colMap.inclusao !== -1 && row[colMap.inclusao]) {
-        row[colMap.inclusao] = parseBrazilianDate(row[colMap.inclusao]);
-      }
+      // Date Conversions
+      if (colMap.inclusao !== -1 && row[colMap.inclusao]) row[colMap.inclusao] = parseBrazilianDate(row[colMap.inclusao]);
+      if (colMap.ultimoEvento !== -1 && row[colMap.ultimoEvento]) row[colMap.ultimoEvento] = parseBrazilianDate(row[colMap.ultimoEvento]);
 
-      // Converter Data Último Evento
-      if (colMap.ultimoEvento !== -1 && row[colMap.ultimoEvento]) {
-        row[colMap.ultimoEvento] = parseBrazilianDate(row[colMap.ultimoEvento]);
-      }
-
-      // Extrair Dígito
+      // Compute "Dígito"
       let digito = "";
       if (colMap.processo !== -1 && row[colMap.processo]) {
-        const procStr = String(row[colMap.processo]).trim();
-        if (procStr.length >= 7) {
-          digito = procStr.charAt(6);
-        }
+        const procStr = String(row[colMap.processo]);
+        if (procStr.length >= 7) digito = procStr.charAt(6);
       }
 
-      // Adicionar novas colunas
-      row.push(gCount);
-      row.push(digito);
-      row.push("FALSO");
+      // Construct New Row based on headerDefs
+      const finalRow = headerDefs.map(def => {
+        if (def.type === 'existing') {
+           // Safely access original row index
+           return row[def.index] !== undefined ? row[def.index] : "";
+        } else {
+           if (def.key === 'gabinete') return gCount;
+           if (def.key === 'digito') return digito;
+           if (def.key === 'feito') return "FALSO";
+        }
+        return "";
+      });
 
-      return row;
+      return finalRow;
     });
 
     return {
