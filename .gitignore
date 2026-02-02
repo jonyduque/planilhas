@@ -25,7 +25,7 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
-*
+
 *.xls
 *.xlsx
 planilha/
