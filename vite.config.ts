@@ -1,8 +1,17 @@
+/// <reference types="vitest" />
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
 import netlify from '@netlify/vite-plugin'
 
 // https://vite.dev/config/
-export default {
+export default defineConfig({
   plugins: [
+    react(),
     netlify()
   ],
-}
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
+})
