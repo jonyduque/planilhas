@@ -1,0 +1,41 @@
+# Histórico da Conversa - Projeto Excel React
+
+**Data:** 02 de Fevereiro de 2026
+**Objetivo Principal:** Migrar bibliotecas Excel, implementar novas colunas ("Dígito", "Feito"), reorganizar colunas e adicionar validações/formatação condicional.
+
+## Resumo das Atividades
+
+1.  **Migração de Bibliotecas**:
+    -   Substituição do carregamento via CDN (Script tags) por pacotes npm locais (`xlsx` para leitura, `exceljs` para escrita).
+    -   Isso garante melhor estabilidade, tipagem e funcionamento offline.
+
+2.  **Refatoração de Código**:
+    -   Extração da lógica de processamento de dados do `src/App.tsx` para um módulo dedicado `src/logic/processor.ts`.
+    -   Criação de testes unitários em `src/logic/processor.test.ts` para garantir a integridade dos dados durante a manipulação.
+
+3.  **Novas Funcionalidades**:
+    -   **Coluna "Dígito"**: Extrai o 7º caractere da coluna "Número Processo".
+    -   **Coluna "Feito"**: Adicionada com padrão "FALSO" e validação de dados (Dropdown com "Sim"/"Não").
+    -   **Coluna "Localizadores do Gabinete"**: Contagem de ocorrências "(G)" nos localizadores.
+
+4.  **Layout e Estilo**:
+    -   **Reorganização de Colunas**:
+        -   "Dígito" e "Feito" agora aparecem imediatamente após "Número Processo".
+        -   "Localizadores do Gabinete" aparece logo após "Localizadores".
+    -   **Formatação Global**: Todas as células com quebra de texto (Wrap Text) e alinhamento vertical centralizado.
+    -   **Formatação Condicional**: Se a coluna "Feito" for marcada como "Sim", a linha inteira fica verde (#C6EFCE) com texto verde escuro.
+
+5.  **Correções de Deploy**:
+    -   Identificado e corrigido problema onde arquivos novos (`src/logic`) estavam sendo ignorados pelo `.gitignore` incorretamente.
+
+## Arquivos Modificados/Criados
+
+-   `src/App.tsx`: Lógica de UI, carregamento de local libs, configuração de ExcelJS (estilos, validação, formatação condicional).
+-   `src/logic/processor.ts`: [NOVO] Lógica pura de transformação de dados e reordenação de colunas.
+-   `src/logic/processor.test.ts`: [NOVO] Testes automatizados com Vitest.
+-   `package.json`: Adição de dependências (`xlsx`, `exceljs`, `vitest`, etc).
+-   `vite.config.ts`: Configuração do ambiente de teste.
+-   `.gitignore`: Ajuste para não ignorar arquivos de fonte importantes.
+
+## Status Atual
+Todos os testes passaram e as alterações foram enviadas para o repositório remoto (push). O deploy automático no Netlify deve ocorrer com sucesso.

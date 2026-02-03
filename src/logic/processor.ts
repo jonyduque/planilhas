@@ -9,7 +9,20 @@ interface ColMap {
   localizadores: number;
   inclusao: number;
   ultimoEvento: number;
+  autores: number;
+  reus: number;
 }
+
+const cleanText = (text: any): string => {
+  if (!text) return "";
+  let str = String(text);
+  str = decodeHTMLEntities(str);
+  // Remove linhas em branco extras e espaços desnecessários
+  return str
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\s*\n/g, '\n') // Remove parágrafos vazios repetidos
+    .trim();
+};
 
 // Função auxiliar para decodificar HTML Entities
 const decodeHTMLEntities = (text: any): string => {
@@ -75,6 +88,8 @@ export const processRows = (rawData: any[][]): ProcessResult => {
       localizadores: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("localizadores")),
       inclusao: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("inclusão no localizador")),
       ultimoEvento: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("último evento")),
+      autores: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("autores principais")),
+      reus: currentHeaders.findIndex((h: any) => h && h.toString().toLowerCase().includes("réus principais")),
     };
 
     // Definitions helper to manage column order
@@ -161,6 +176,14 @@ export const processRows = (rawData: any[][]): ProcessResult => {
       if (colMap.processo !== -1 && row[colMap.processo]) {
         const procStr = String(row[colMap.processo]);
         if (procStr.length >= 7) digito = procStr.charAt(6);
+      }
+
+      // Clean Autores and Réus
+      if (colMap.autores !== -1 && row[colMap.autores]) {
+        row[colMap.autores] = cleanText(row[colMap.autores]);
+      }
+      if (colMap.reus !== -1 && row[colMap.reus]) {
+        row[colMap.reus] = cleanText(row[colMap.reus]);
       }
 
       // Construct New Row based on headerDefs

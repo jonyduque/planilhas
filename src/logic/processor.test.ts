@@ -82,4 +82,19 @@ describe('processRows', () => {
     const result = processRows([]);
     expect(result.error).toBeDefined();
   });
+  it('should clean Autores Principais and Réus Principais columns', () => {
+    const rawData = [
+      ["Ignored"],
+      ["Autores Principais", "Réus Principais"],
+      ["Autor 1\n\n\nAutor 2", "Réu 1&nbsp;&nbsp;"]
+    ];
+
+    const result = processRows(rawData);
+
+    const autorIndex = result.headers.indexOf("Autores Principais");
+    const reuIndex = result.headers.indexOf("Réus Principais");
+
+    expect(result.data[0][autorIndex]).toBe("Autor 1\nAutor 2");
+    expect(result.data[0][reuIndex]).toBe("Réu 1");
+  });
 });
